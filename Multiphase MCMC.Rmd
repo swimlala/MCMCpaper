@@ -1,0 +1,322 @@
+---
+title: "MultiphaseMCMC"
+author: "Laura Albrecht"
+date: "11/27/2019"
+output: html_document
+---
+```{r}
+library('deSolve')
+library(deGradInfer)
+library(dplyr)
+library(ggplot2)
+
+#Simple Lotka-Volterra Function
+LV_func <- function(t, X, params) {
+dxdt = cbind(
+X[,1]*(params[1] - params[2]*X[,2]), # Prey
+- X[,2]*(params[3] - params[4]*X[,1]) # Predators
+)
+return(dxdt)
+}
+
+
+deSolve_LV_func = function(t,y,params) {
+list(LV_func(t,matrix(y,1,length(y)),params))
+}
+# Generate some data
+test.times = seq(0,2,0.1)
+test.data = ode(c(5,3), test.times, deSolve_LV_func, c(2,1,4,1))
+test.data = test.data[,2:3] +
+rnorm(dim(test.data)[1]*2,0,0.01) # add some observational noise
+
+
+agm.result = agm(test.data,test.times,LV_func,4,noise.sd=0.1, chainNum=5)
+print(agm.result$posterior.mean)
+```
+
+```{r}
+plotting.frame = data.frame(Param.Values=c(agm.result$posterior.samples),
+Param.Num=rep(1:4, each=dim(agm.result$posterior.samples)[1]))
+ggplot(plotdf, aes(x=Param.Values, y=..scaled..)) +
+facet_wrap(~paste('Parameter', Param.Num), scales = 'free') +
+geom_density() +
+labs(y='Scaled Density', x='Parameter Value') +
+xlim(c(0,5))
+```
+
+```{r}
+qplot(x=seq(100,1000,, length(c(agm.result$ll))), y=c(agm.result$ll), geom = 'line') #+
+labs(x='Iterations', y='Log-likelihood')
+```
+```{r}
+#tempering paramter
+agm.result1000 = agm(test.data,test.times,LV_func,4,noise.sd=0.1, maxIterations = 1000, showPlot = TRUE)
+```
+
+```{r}
+#directly solving the ODE
+agm.resultdirect = agm(test.data,test.times,LV_func,numberOfParameters=6, maxIterations = 10000, explicit=TRUE, showProgress = TRUE)
+```
+
+```{r}
+LV_func <- function(t, X, params) {
+dxdt = cbind(
+X[,1]*(params[1] - params[2]*X[,2]), # Prey
+- X[,2]*(params[3] - params[4]*X[,1]) # Predators
+)
+return(dxdt)
+}
+
+par_ex1 <- c(k12 = 1, k21 = 0.7, k02 = 0.4, k01 = 0.7, V = 3)
+Ex1Func <- function(t, X, params){
+      params = exp(params)
+  
+      dxdt = cbind(params[1]*X[,2] - (params[4] + params[2])*X[,1],
+      params[2]*X[,1] - (params[3] + params[1])*X[,2])
+    
+    # return(list(c(dX1, dX2)))
+    # dxdt = cbind(-params[1]*X[,1]*X[,2] + ((params[1]*params[2]-params[3]) +params[3])*X[,3],
+    # -params[1]*X[,1]*X[,2] + (params[1]*params[2]-params[3])*X[,3],
+    # params[1]*X[,1]*X[,2] - ((params[1]*params[2]-params[3]) +params[3])*X[,3],
+    # params[3]*X[,3],
+    # params[3]*X[,3])
+    return(dxdt)
+  
+}
+
+testLogPrior <- function(params)
+{
+return(c(dunif(params[1],0,2,log=TRUE),
+dunif(params[2], 0, 2, log=TRUE),
+dunif(params[3], 0, 2, log=TRUE),
+dunif(params[3], 0, 2, log=TRUE)))
+}
+
+par_ex1 <- c(k12 = 1, k21 = 0.7, k02 = 0.4, k01 = 0.7, V = 3)
+par_ex1noise <- 
+deSolve_Ex1func = function(t,y,params) {
+list(Ex1Func(t,matrix(y,1,length(y)),params))
+}
+# Generate some data
+test.timesnull = seq(0,10,0.2)
+test.datanull = ode(c(15,0), test.timesnull, deSolve_Ex1func, log(c(1,0.7, 0.4, 0.7)))
+plot(test.datanull)
+test.datanull = test.datanull[,2:3] +rnorm(dim(test.datanull)[1]*2,0,0.1) # add some observational noise
+plot(test.datanull[,2], type = "l")
+par_ex1 <- c(k12 = 1, k21 = 0.7, k02 = 0.4, k01 = 0.7, V = 3)
+
+agm.resultex1 = agm(test.datanull,test.timesnull,Ex1Func,4,noise.sd=0.1,
+maxIterations=1000,chainNum=5, initialisedParameters = c(1.2, 1, 0.5, 1), logPrior = testLogPrior)
+print(agm.resultex1$posterior.mean)
+
+restest = agm(test.datanull,test.timesnull,NullFunc,numberOfParameters=3,explicit=TRUE, maxIterations = 100)
+```
+```{r}
+Nullfunc = function(t, X, params){
+  params = exp(params)
+    dxdt = cbind(-params[1]*X[,1]*X[,2] + ((params[1]*params[2]-params[3]) +params[3])*X[,3],
+    -params[1]*X[,1]*X[,2] + (params[1]*params[2]-params[3])*X[,3],
+    params[1]*X[,1]*X[,2] - ((params[1]*params[2]-params[3]) +params[3])*X[,3],
+    params[3]*X[,3],
+    params[3]*X[,3])
+    return(dxdt)
+  
+}
+
+deSolveNullfunc <- function(t,y,params) {
+list(Nullfunc(t,matrix(y,1,length(y)),params))
+}
+
+
+
+
+data.null = ode(c(0.005, 400, 0, 0, 0), time2, deSolveNullfunc, log(c(10, 140, 78)), method = "bdf")
+data.null = data.null[,2:6] +rnorm(dim(data.null)[1]*5,0,0.01) # add some
+
+agm.resultnull = agm(data.null,seq(0, 3600,100),NullFunc,3,
+maxIterations=10000,chainNum=5, initialisedParameters = c(5, 150, 100))
+
+plot(data.null)
+
+agm.resultnull = agm(data.null,seq(0, 3600,100),NullFunc,3,
+maxIterations=10000,chainNum=5, initialisedParameters = c(5, 150, 100))
+
+data.null[,1:4] = NA
+agm.resultnullF = agm(data.null,seq(0, 3600,100),NullFunc,3, maxIterations=1000,chainNum=5, initialisedParameters = c(5, 150, 100), observedVariables = 5)
+
+head(data.null)
+
+
+plotting.frame = data.frame(Param.Values=c(agm.resultnull$posterior.samples), Param.Num=rep(1:3, each=dim(agm.resultnull$posterior.samples)[1]))
+ggplot(plotting.frame, aes(x=Param.Values, y=..scaled..)) +
+facet_wrap(~paste('Parameter', Param.Num), scales = 'free') +
+geom_density() +
+labs(y='Scaled Density', x='Parameter Value')
+```
+
+```{r}
+testLogPriorNull <- function(params)
+{
+return(c(dunif(params[1],0,2,log=TRUE),
+dunif(params[2], 0, 100, log=TRUE),
+dunif(params[3], 50, 200, log=TRUE),
+dunif(params[3], 70, 150, log=TRUE)))
+}
+
+data.null = ode(c(0.005, 400, 0.001, 0.001, 0.001), seq(0, 3600,100), deSolveNullfunc, log(c(10, 140, 78)), method = "bdf")
+data.null = data.null[,2:6] +rnorm(dim(data.null)[1]*5,0,0.01) # add some
+
+agm.resultnullPrior = agm(data.null,seq(0, 3600,100),Nullfunc,3,
+maxIterations=1000,chainNum=5, initialisedParameters = c(5, 150, 100), logPrior = "Gamma")
+
+plotting.frame = data.frame(Param.Values=c(agm.resultnullPrior$posterior.samples), Param.Num=rep(1:3, each=dim(agm.resultnullPrior$posterior.samples)[1]))
+ggplot(plotting.frame, aes(x=Param.Values, y=..scaled..)) +
+facet_wrap(~paste('Parameter', Param.Num), scales = 'free') +
+geom_density() +
+labs(y='Scaled Density', x='Parameter Value')
+```
+```{r}
+agm.resultnullMixed = agm(data.null,seq(0, 3600,100),Nullfunc,3,maxIterations=1000,chainNum=5, initialisedParameters = c(5, 150, 70), logPrior = "Mixed")
+
+plotting.frame = data.frame(Param.Values=c(agm.resultnullMixed$posterior.samples), Param.Num=rep(1:3, each=dim(agm.resultnullMixed$posterior.samples)[1]))
+ggplot(plotting.frame, aes(x=Param.Values, y=..scaled..)) +
+    facet_wrap(~paste('Parameter', Param.Num), scales = 'free') +
+    geom_density() +
+    labs(y='Scaled Density', x='Parameter Value')
+
+```
+
+```{r}
+agm.resultnullMixed2 = agm(data.null,seq(0, 3600,100),Nullfunc,3,maxIterations=1000, noise.sd=0.0001, chainNum=5, initialisedParameters = agm.resultnullMixed$posterior.mean, logPrior = "Mixed")
+
+
+plotting.frame2 = data.frame(Param.Values=c(agm.resultnullMixed2$posterior.samples), Param.Num=rep(1:3, each=dim(agm.resultnullMixed2$posterior.samples)[1]))
+ggplot(plotting.frame2, aes(x=Param.Values, y=..scaled..)) +
+    facet_wrap(~paste('Parameter', Param.Num), scales = 'free') +
+    geom_density() +
+    labs(y='Scaled Density', x='Parameter Value')
+```
+
+```{r}
+agm.resultnullMixed3 = agm(data.null,seq(0, 3600,100),Nullfunc,8,maxIterations=1000,chainNum=5, initialisedParameters = c(2.75, 147.4, 69.9, 0.005, ), explicit=TRUE)
+
+
+plotting.frame3 = data.frame(Param.Values=c(agm.resultnullMixed3$posterior.samples[,1:3]), Param.Num=rep(1:3, each=dim(agm.resultnullMixed3$posterior.samples)[1]))
+ggplot(plotting.frame3, aes(x=Param.Values, y=..scaled..)) +
+    facet_wrap(~paste('Parameter', Param.Num), scales = 'free') +
+    geom_density() +
+    labs(y='Scaled Density', x='Parameter Value')
+```
+
+```{r}
+testLogPriorNullAll <- function(params){
+return(c(dunif(params[1],0,20,log=TRUE),
+dunif(params[2], 130, 200, log=TRUE),
+dunif(params[3], 50, 100, log=TRUE),
+dunif(params[4], 0.005*.97, 0.005*1.03, log=TRUE),
+dunif(params[5], 400*.97, 400*1.03, log = TRUE),
+dunif(params[6], 0, 0.0001, log = TRUE),
+dunif(params[7], 0, 10, log = TRUE), 
+dunif(params[8], 0, 10, log = TRUE)))
+}
+
+agm.resultnullMixed3.3 = agm(data.null,time2,Nullfunc,8,maxIterations=1000,chainNum=5, initialisedParameters = c(3.75, 148.709, 69.9995, 0.005, 400, 0.00001, .001, .001), explicit=TRUE, logPrior = "Mixed")
+
+plotting.frame3.3 = data.frame(Param.Values=c(agm.resultnullMixed3.3$posterior.samples[,1:3]), Param.Num=rep(1:3, each=dim(agm.resultnullMixed3.3$posterior.samples)[1]))
+ggplot(plotting.frame3.3, aes(x=Param.Values, y=..scaled..)) +
+    facet_wrap(~paste('Parameter', Param.Num), scales = 'free') +
+    geom_density() +
+    labs(y='Scaled Density', x='Parameter Value')
+```
+```{r}
+plotting.frame = data.frame(Param.Values=c(agm.result1000$posterior.samples),
+                            Param.Num=rep(1:4, each=dim(agm.result1000$posterior.samples)[1]))
+ggplot(plotting.frame, aes(x=Param.Values, y=..scaled..)) +
+    facet_wrap(~paste('Parameter', Param.Num), scales = 'free') +
+    geom_density() +
+    labs(y='Scaled Density', x='Parameter Value') +
+    xlim(c(0,5))
+```
+```{r}
+data.null1 = ode(c(0.005, 400, 0, 0, 0), seq(0, 3600,100), deSolveNullfunc, log(c(10, 140, 78)), method = "bdf")
+plot(data.null1, main = c("E", "PF", "EPF", "P", "F"), ylab = "Concentration (M)")
+```
+
+```{r}
+plotting.frame = data.frame(Param.Values=c(agm.resultnullPrior$posterior.samples), Param.Num=rep(1:3, each=dim(agm.resultnullPrior$posterior.samples)[1]))
+ggplot(plotting.frame, aes(x=Param.Values, y=..scaled..)) +
+facet_wrap(~paste('Parameter', Param.Num), scales = 'free') +
+geom_density() +
+labs(y='Scaled Density', x='Parameter Value')
+
+dat = data.table(plotting.frame)
+dat[Param.Num == "1",x_min := 0]
+dat[Param.Num == "1",x_max := 5]
+dat[Param.Num == "2",x_min := 130]
+dat[Param.Num == "2",x_max := 380]
+dat[Param.Num == "3",x_min :=90]
+dat[Param.Num == "3",x_max := 110]
+
+ggplot(plotting.frame, aes(x=Param.Values, y=..scaled..)) +
+facet_wrap(~paste('Parameter', Param.Num), scales = 'free_x') +
+geom_density()
+```
+```{r}
+library(readr)
+xa_exp <- read_csv("~/Dropbox/Grad School/xa_experiment.csv")
+time = xa_exp$`time (sec)`
+xa1 = (xa_exp$Xa1 - 0.034)/(9920*0.375)*1000000 #convert from absorbance to concentration
+
+invisible(fit1 <- Tps(time, xa1))
+fHat<- predict( fit1)
+invisible(DfHat1<- predictDerivative.Krig( fit1, derivative=1))
+
+
+matplot( time[-1], DfHat1[-1], type="l",lty=1, lwd=2, xlab = "time", ylab = "dF/dt")
+```
+```{r}
+realdat <- data.frame(E =rep(NA, length(xa1)), PF = rep(NA, length(xa1)), EPF = rep(NA, length(xa1)), P = rep(NA, length(xa1)), f = xa1)
+head(realdat)
+realdat <- rbind(c(NA, NA, NA, NA, 0), realdat)
+```
+```{r}
+agm.resultnullreal = agm(data.real,time2,Nullfunc,3,maxIterations=1000,chainNum=5, initialisedParameters = c(5, 150, 70),logPrior = "Mixed")
+
+plotting.framereal = data.frame(Param.Values=c(agm.resultnullreal$posterior.samples), Param.Num=rep(1:3, each=dim(agm.resultnullreal$posterior.samples)[1]))
+ggplot(plotting.frame, aes(x=Param.Values, y=..scaled..)) +
+facet_wrap(~paste('Parameter', Param.Num), scales = 'free') +
+geom_density() +
+labs(y='Scaled Density', x='Parameter Value')
+
+data.null = ode(c(0.005, 400, 0.001, 0.001, 0.001), time2, deSolveNullfunc, log(c(10, 140, 78)), method = "bdf")
+
+data.real = data.null[,2:6]
+data.real[,5] = c(0, xa1)
+```
+```{r}
+plotting.frame = data.frame(Param.Values=c(agm.resultdirect$posterior.samples),
+                            Param.Num=rep(1:4, each=dim(agm.resultdirect$posterior.samples)[1]))
+ggplot(plotting.frame, aes(x=Param.Values, y=..scaled..)) +
+    facet_wrap(~paste('Parameter', Param.Num), scales = 'free') +
+    geom_density() +
+    labs(y='Scaled Density', x='Parameter Value') +
+    xlim(c(0,5))
+
+
+```
+```{r}
+plot1 = data.frame(Param.Values = rnorm(1000, 2, 0.1),Param.Num = rep(1, 1000))
+plot2 = data.frame(Param.Values = rnorm(1000, 1, 0.1),Param.Num = rep(2, 1000))
+plot3 = data.frame(Param.Values = rnorm(1000, 4, 0.1),Param.Num = rep(3, 1000))
+plot4 = data.frame(Param.Values = rnorm(1000, 1, 0.1),Param.Num = rep(4, 1000))
+
+plotdf = rbind(plot1, plot2, plot3, plot4)
+head(plotdf)
+
+ggplot(plotdf, aes(x=Param.Values, y=..scaled..)) +
+    facet_wrap(~paste('Parameter', Param.Num), scales = 'free') +
+    geom_density() +
+    labs(y='Scaled Density', x='Parameter Value') +
+    xlim(c(0,5))
+```
+
