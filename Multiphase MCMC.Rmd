@@ -5,6 +5,7 @@ date: "11/27/2019"
 output: html_document
 ---
 ```{r}
+#load packages
 library('deSolve')
 library(deGradInfer)
 library(dplyr)
@@ -29,12 +30,13 @@ test.data = ode(c(5,3), test.times, deSolve_LV_func, c(2,1,4,1))
 test.data = test.data[,2:3] +
 rnorm(dim(test.data)[1]*2,0,0.01) # add some observational noise
 
-
+#run Phase 1 MCMC until convergence
 agm.result = agm(test.data,test.times,LV_func,4,noise.sd=0.1, chainNum=5)
 print(agm.result$posterior.mean)
 ```
 
 ```{r}
+#plot results from MCMC
 plotting.frame = data.frame(Param.Values=c(agm.result$posterior.samples),
 Param.Num=rep(1:4, each=dim(agm.result$posterior.samples)[1]))
 ggplot(plotdf, aes(x=Param.Values, y=..scaled..)) +
@@ -112,6 +114,8 @@ print(agm.resultex1$posterior.mean)
 restest = agm(test.datanull,test.timesnull,NullFunc,numberOfParameters=3,explicit=TRUE, maxIterations = 100)
 ```
 ```{r}
+
+# Set up blood coag function
 Nullfunc = function(t, X, params){
   params = exp(params)
     dxdt = cbind(-params[1]*X[,1]*X[,2] + ((params[1]*params[2]-params[3]) +params[3])*X[,3],
@@ -129,10 +133,11 @@ list(Nullfunc(t,matrix(y,1,length(y)),params))
 
 
 
-
+#solve ode and add noise
 data.null = ode(c(0.005, 400, 0, 0, 0), time2, deSolveNullfunc, log(c(10, 140, 78)), method = "bdf")
-data.null = data.null[,2:6] +rnorm(dim(data.null)[1]*5,0,0.01) # add some
+data.null = data.null[,2:6] +rnorm(dim(data.null)[1]*5,0,0.01) # add some noise
 
+#step 1 of multiphase
 agm.resultnull = agm(data.null,seq(0, 3600,100),NullFunc,3,
 maxIterations=10000,chainNum=5, initialisedParameters = c(5, 150, 100))
 
@@ -155,6 +160,7 @@ labs(y='Scaled Density', x='Parameter Value')
 ```
 
 ```{r}
+#test my own prior functions
 testLogPriorNull <- function(params)
 {
 return(c(dunif(params[1],0,2,log=TRUE),
@@ -176,6 +182,7 @@ geom_density() +
 labs(y='Scaled Density', x='Parameter Value')
 ```
 ```{r}
+#Step 1
 agm.resultnullMixed = agm(data.null,seq(0, 3600,100),Nullfunc,3,maxIterations=1000,chainNum=5, initialisedParameters = c(5, 150, 70), logPrior = "Mixed")
 
 plotting.frame = data.frame(Param.Values=c(agm.resultnullMixed$posterior.samples), Param.Num=rep(1:3, each=dim(agm.resultnullMixed$posterior.samples)[1]))
@@ -187,7 +194,8 @@ ggplot(plotting.frame, aes(x=Param.Values, y=..scaled..)) +
 ```
 
 ```{r}
-agm.resultnullMixed2 = agm(data.null,seq(0, 3600,100),Nullfunc,3,maxIterations=1000, noise.sd=0.0001, chainNum=5, initialisedParameters = agm.resultnullMixed$posterior.mean, logPrior = "Mixed")
+#Step 2 of multiphase approach with sd fixed
+agm.resultnullMixed2 = agm(data.null,seq(0, 3600,100),Nullfunc,3,maxIterations=1000, noise.sd=0.1, chainNum=5, initialisedParameters = agm.resultnullMixed$posterior.mean, logPrior = "Mixed")
 
 
 plotting.frame2 = data.frame(Param.Values=c(agm.resultnullMixed2$posterior.samples), Param.Num=rep(1:3, each=dim(agm.resultnullMixed2$posterior.samples)[1]))
@@ -198,6 +206,7 @@ ggplot(plotting.frame2, aes(x=Param.Values, y=..scaled..)) +
 ```
 
 ```{r}
+#Step 3 in multiphase, explicit = TRUE means we solve the ODE without Gaussian Process smoothing
 agm.resultnullMixed3 = agm(data.null,seq(0, 3600,100),Nullfunc,8,maxIterations=1000,chainNum=5, initialisedParameters = c(2.75, 147.4, 69.9, 0.005, ), explicit=TRUE)
 
 
